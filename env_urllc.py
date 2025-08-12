@@ -1,6 +1,7 @@
 import gymnasium as gym
 import numpy as np
 from scipy.special import erf
+from scipy.stats import f
 
 class ENV_paper(gym.Env):
     def __init__(self, lambda_rate, D_max, xi, max_power, snr_feedback, harq_type):
@@ -78,27 +79,26 @@ class ENV_paper(gym.Env):
         => Hệ số kênh h = h_l * h_f * h_p * h_a
         """
         # Tham số
-        distance = 0.1 # (Z) khoảng cách từ máy phát tới máy thu (km)
+        distance = 0.5 # (Z) khoảng cách từ máy phát tới máy thu (km)
         coe = 1 # (km^-1)
-        a  = 0.1 # bán kính máy thu (m)
-        W_L = 4 # beam width (m)
-        r = 0 # khoảng cách tù tâm chùm beam tới thấu kính thu (m)
         C2n = 1e-14  # Nhiễu loạn khí quyển
         fso_lambda = 1550e-9 # Bước sóng (m)
         k = 2 * np.pi / fso_lambda 
         r_a = 0.1 # bán kính máy thu (m)
         w_z = 3.2 # Độ thắt chùm beam (m)
         FOV = 16.5e-3  # Góc nhìn tối đa của RX (mrad)
+        noise_var = 1e-9
         
         # 1. Suy hao khí quyển
         h_l = np.exp(-distance * coe)
         
         # 2. Nhiễu loạn
-        Rytov_var = 1.23 * C2n * (k**(7/6)) * (distance**(11/6))
-        sigma_F2 = (Rytov_var ** 2)/4
-        mu_F = - sigma_F2
-        X = np.random.lognormal(mean=mu_F, sigma=np.sqrt(sigma_F2))
-        h_f = np.exp(X)
+        Rytov_var = 1.23 * C2n * (k**(7/6)) * ((distance*1e3)**(11/6))
+        sigma_lnS = (0.49 * Rytov_var**2) / (1 + 1.11 * Rytov_var**(6/5))**(7/6)
+        sigma_lnL = (0.51 * Rytov_var**2) / (1 + 0.69 * Rytov_var**(6/5))**(5/6)
+        a_f = 1 / (np.exp(sigma_lnS) - 1)
+        b_f = 1 / (np.exp(sigma_lnL) - 1) + 2
+        h_f = f.rvs(dfn=2*a_f, dfd=2*b_f)
 
         # 3. Lỗi lệch hướng
         sigma_p2 = 0.2**2 # Phương sai của tọa độ(m^2)
@@ -137,7 +137,7 @@ class ENV_paper(gym.Env):
 
         # Hệ số kênh
         h = h_l * h_f * h_p * h_a
-        snr = p_t * (np.abs(h)**2)
+        snr = p_t * (np.abs(h)**2) / noise_var
 
         # Determine target coding rate
         if self.k == 0:  # New transmission
