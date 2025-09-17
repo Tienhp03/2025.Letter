@@ -1,3 +1,4 @@
+
 import torch
 import numpy as np
 import math
@@ -8,8 +9,10 @@ from env_urllc_IR_CC import ENV_paper
 def evaluate_model(ppo_agent, model_path, env, num_episodes=50, max_ep_len=1000):
     """
     Evaluate the PPO model over multiple episodes and print average results.
-    Additionally, compute the average successful bits per time slot across all episodes
-    and save to a single CSV file with columns: Time Slot, Average Bits Successful.
+    Additionally, compute the average successful bits and average power per time slot
+    across all episodes and save to two separate CSV files with columns:
+    - Time Slot, Average Bits Successful
+    - Time Slot, Average Power
 
     Args:
         ppo_agent (PPO): Initialized PPO agent.
@@ -25,8 +28,9 @@ def evaluate_model(ppo_agent, model_path, env, num_episodes=50, max_ep_len=1000)
     total_powers = []
     total_rewards = []
     total_delay_violations = []
-    # Dictionary to store bits_successful for each time slot across episodes
+    # Dictionaries to store bits_successful and power for each time slot across episodes
     bits_per_slot = {t: [] for t in range(1, max_ep_len + 1)}
+    power_per_slot = {t: [] for t in range(1, max_ep_len + 1)}
 
     for episode in range(1, num_episodes + 1):
         state, _ = env.reset()
@@ -50,14 +54,16 @@ def evaluate_model(ppo_agent, model_path, env, num_episodes=50, max_ep_len=1000)
             episode_reward += reward
             episode_delay_violations += 1 if info.get('delay_violation', False) else 0
             
-            # Collect bits successful for this time slot
+            # Collect bits successful and power for this time slot
             bits_successful = info.get('bits_successful', 0)
             bits_per_slot[t].append(bits_successful)
+            power_per_slot[t].append(power)
 
             if done:
                 # Fill remaining slots with 0 if episode ends early
                 for remaining_t in range(t + 1, max_ep_len + 1):
                     bits_per_slot[remaining_t].append(0)
+                    power_per_slot[remaining_t].append(0)
                 break
 
         total_powers.append(episode_power)
@@ -81,11 +87,23 @@ def evaluate_model(ppo_agent, model_path, env, num_episodes=50, max_ep_len=1000)
         avg_bits = np.mean(bits_per_slot[t]) if bits_per_slot[t] else 0
         avg_bits_data.append([t, avg_bits])
 
-    # Save to CSV
-    df = pd.DataFrame(avg_bits_data, columns=['Time Slot', 'Average Bits Successful'])
-    csv_file = 'average_successful_bits.csv'
-    df.to_csv(csv_file, index=False)
-    print(f"Average successful bits per time slot saved to {csv_file}")
+    # Save average bits to CSV
+    bits_df = pd.DataFrame(avg_bits_data, columns=['Time Slot', 'Average Bits Successful'])
+    bits_csv_file = 'average_successful_bits.csv'
+    bits_df.to_csv(bits_csv_file, index=False)
+    print(f"Average successful bits per time slot saved to {bits_csv_file}")
+
+    # Calculate average power per time slot
+    avg_power_data = []
+    for t in range(1, max_ep_len + 1):
+        avg_power = np.mean(power_per_slot[t]) if power_per_slot[t] else 0
+        avg_power_data.append([t, avg_power])
+
+    # Save average power to CSV
+    power_df = pd.DataFrame(avg_power_data, columns=['Time Slot', 'Average Power'])
+    power_csv_file = 'average_power.csv'
+    power_df.to_csv(power_csv_file, index=False)
+    print(f"Average power per time slot saved to {power_csv_file}")
 
 if __name__ == "__main__":
     # Example usage
